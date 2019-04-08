@@ -1,0 +1,298 @@
+---
+title: "Untitled"
+author: "HW1"
+date: "7 April 2019"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(repos = c(CRAN = "https://cran.rstudio.com"))
+
+```
+
+## R Markdown
+
+```{r}
+install.packages("tm")
+install.packages("SnowballC")
+install.packages("ggplot2")
+#load library
+
+library(SnowballC)
+library(tm)
+library(ggplot2)
+
+#wordcloud
+install.packages("wordcloud")
+library(wordcloud)
+
+```
+
+```{r}
+#Create Corpus
+docs <- Corpus(DirSource("C:/Users/bachh/OneDrive/Desktop/Textbooks/TBANLT570/textmining_1"))
+docs
+
+```
+
+```{r}
+#inspect a particular document
+writeLines(as.character(docs[[30]]))
+getTransformations()
+
+```
+#preliminary clean-up steps beforetransformations
+#inspect some documents in the corpus 
+#Find colons and hyphens without spaces between the words separated by them. 
+#Using the removePunctuation transform  without fixing this will cause the two words on either side of the symbols  to be combined. 
+#Fix this prior to using the transformations.
+#reate a custom transformation with tm package
+#via the content_transformer function
+#which takes a function as input which specifies what transformation needs to be done. 
+#input function would be one that replaces all instances of a character by spaces. 
+#Use the gsub() function does just that.
+#create the toSpace content transformer
+```{r}
+toSpace <- content_transformer(function(x, pattern) {return (gsub(pattern, " ", x))})
+docs <- tm_map(docs, toSpace, "-")
+docs <- tm_map(docs, toSpace, ":")
+#docs <- tm_map(docs,toSpace, "–")
+#Remove punctuation – replace punctuation marks with " “
+writeLines(as.character(docs[[30]]))
+docs <- tm_map(docs, removePunctuation)
+writeLines(as.character(docs[[30]]))
+#inspect
+docs <- tm_map(docs, toSpace, "’")
+docs <- tm_map(docs, toSpace, "‘")
+docs <- tm_map(docs, toSpace, " -")
+
+```
+
+```{r}
+#Convert the corpus to lower case
+#Transform to lower case (need to wrap in content_transformer)
+docs <- tm_map(docs,content_transformer(tolower))
+writeLines(as.character(docs[[30]]))
+
+#Remove all numbers.
+#Strip digits (std transformation, so no need for content_transformer)
+docs <- tm_map(docs, removeNumbers)
+#remove stopwords using the standard list in tm
+docs <- tm_map(docs, removeWords, stopwords("english"))
+
+```
+
+
+```{r}
+
+#remove all extraneous whitespaces using the stripWhitespace transformation:
+  
+  #Strip whitespace (cosmetic?)
+  docs <- tm_map(docs, stripWhitespace)
+
+```
+
+```{r}
+#stemming
+  #common Root Words
+  # Simple steming algorithms cut off the ends - mate - mating to mat
+  writeLines(as.character(docs[[30]]))
+
+```
+```{r}
+ #Stem document
+  
+  docs <- tm_map(docs,stemDocument)
+  writeLines(as.character(docs[[30]]))
+  #use lemmatization instead to take into account parts of speech - grammatical context
+  
+  #look for problems or different spellings or variations
+  docs <- tm_map(docs, content_transformer(gsub), pattern = "organiz", replacement = "organ")
+  
+  docs <- tm_map(docs, content_transformer(gsub), pattern = "organis", replacement = "organ")
+  
+  docs <- tm_map(docs, content_transformer(gsub), pattern = "andgovern", replacement = "govern")
+  
+  docs <- tm_map(docs, content_transformer(gsub), pattern = "inenterpris", replacement = "enterpris")
+  
+  docs <- tm_map(docs, content_transformer(gsub), pattern = "team-", replacement = "team")
+
+```
+```{r}
+dtm <- DocumentTermMatrix(docs)
+dtm
+inspect(dtm[1:2,1000:1008])
+```
+``
+
+```{r}
+#document term matrix
+#Mining the corpus
+#first convert the TDM into a mathematical matrix using the as.matrix() function
+#then sum over all rows to give us the totals for each column (term)
+#result is stored in the (column matrix) variable freq.
+#View(mat)
+freq <- colSums(as.matrix(dtm))
+#Check that the dimension of freq equals the number of terms:
+#length should be total number of terms
+length(freq)
+
+```
+
+```{r}
+#create sort order (descending)
+  ord <- order(freq,decreasing=TRUE)
+#list the most and least frequently occurring terms:
+    
+#inspect most frequently occurring terms
+    freq[head(ord)]
+
+#inspect least frequently occurring terms
+    freq[tail(ord)]
+
+```
+```{r}
+#Couple of ways to simple ways to strike a balance between frequency and specificity.
+#One way - use  inverse document frequencies. 
+#A simpler approach - eliminate words that occur in a large fraction of corpus documents.
+
+#keep only words that are longer than 3 characters and less than 21 - why?
+dtmr <-DocumentTermMatrix(docs, control=list(wordLengths=c(4, 20),
+                                                 bounds = list(global = c(3,27))))
+dtmr
+#reduced sparsity
+```
+
+    
+```{r}
+#review the frequencies as before
+freqr <- colSums(as.matrix(dtmr))
+#length should be total number of terms
+length(freqr)
+
+```
+```{r}
+#create sort order (asc)
+ordr <- order(freqr,decreasing=TRUE)
+#inspect most frequently occurring terms
+freqr[head(ordr)]
+
+#inspect least frequently occurring terms
+freqr[tail(ordr)]
+#find terms that have occured at least 80 times
+findFreqTerms(dtmr,lowfreq=80)
+
+```
+
+```{r}
+#find associations between frequent terms (in this case) - correlations between terms
+#for findassocs provide the DTM, the term of interest and the correlation limit - between 0 and 1(always occur)  
+findAssocs(dtmr,"project",0.6)
+
+#find associations between 
+findAssocs(dtmr,"enterpris",0.6)
+findAssocs(dtmr,"system",0.6)
+#presence of a term in these list is not indicative of its frequency
+#it is a measure of the frequency with which the two (search and result term)  co-occur (or show up together) in documents across
+#Note also, that it is not an indicator of nearness or contiguity - 
+#because the document term matrix does not store any information on proximity of term -  simply a “bag of words."
+
+```
+```{r}
+
+
+#lets look at frequency histogram
+#create a data frame – a list of columns of equal length. 
+#the data frame also contains the name of the columns – in this case these are term and occurrence respectively
+wf=data.frame(term=names(freqr),occurrences=freqr)
+names(wf)
+
+```
+
+```{r}
+#plot only those terms that occur more than 100 times.  
+#the aes option describes plot aesthetics 
+#we use it to specify the x and y axis labels
+#the stat="identity" option in geom_bar () ensures  that the height of each bar is 
+#proportional to the data value that is mapped to the y-axis  (i.e occurrences)
+#the last line  specifies that the x-axis labels should be at a 45 degree angle and should be horizontally justified 
+#(see what happens if you leave this out). 
+p <- ggplot(subset(wf, freqr>100), aes(term, occurrences))
+p <- p + geom_bar(stat="identity")
+p <- p + theme(axis.text.x=element_text(angle=45, hjust=1))
+p
+
+```
+
+```{r}
+#Setting a seed number ensures that you get the same look each time
+#The arguments of the wordcloud() function -  can specify the maximum number of words to be included instead of the minimum frequency
+
+set.seed(421)
+#limit words by specifying min frequency
+wordcloud(names(freqr),freqr, min.freq=70)
+
+#…add color
+wordcloud(names(freqr),freqr,min.freq=70,colors=brewer.pal(6,"Dark2"))
+
+#
+
+
+```
+
+
+```{r}
+
+myStopwords <- c("can", "say","one","way","use",
+                                    "also","howev", "tell", "will",
+                                    "much","need","take","tend","even",
+                                    "like","particular","rather","said",
+                                    "get","well","make","ask","come","end"<
+                                    "first","two","help","often","may",
+                                    "might","see","someth","thing","point",
+                                    "post", "look", "right", "now", "think", "'ve",
+                                    "'re ")
+#remove custom stopwords
+docs <- tm_map(docs, removeWords, myStopwords)
+docs
+
+```
+```{r}
+
+#clustering example
+#convert dtm to matrix
+m <- as.matrix(dtm)
+#write as csv file (optional)
+#write.csv(m,file="dtmEight2Late.csv")
+
+```
+
+```{r}
+#shorten rownames for display purposes
+rownames(m) <- paste(substring(rownames(m),1,3),rep("..",nrow(m)),substring(rownames(m), nchar(rownames(m))-12,nchar(rownames(m))-4))
+#compute distance between document vectors
+d <- dist(m)
+#run hierarchical clustering using Ward’s method
+groups <- hclust(d,method="ward.D")
+#plot dendogram, use hang to ensure that labels fall below tree
+
+plot(groups, hang=-1)
+#cut into 2 subtrees – try 3 and 5
+#rect.hclust(groups,3)
+#k means algorithm, 2 clusters, 100 starting configurations
+kfit <- kmeans(d, 2, nstart=100)
+#plot – need library cluster
+library(cluster)
+clusplot(as.matrix(d), kfit$cluster, color=T, shade=T, labels=2, lines=0)
+#kmeans – determine the optimum number of clusters (elbow method)
+#look for “elbow” in plot of summed intra-cluster distances (withinss) as fn of k
+wss <- 2:29
+for (i in 2:29) wss[i] <- sum(kmeans(d,centers=i,nstart=25)$withinss)
+plot(2:29, wss[2:29], type="b", xlab="Number of Clusters",ylab="Within groups sum of squares")
+
+```
+
+
